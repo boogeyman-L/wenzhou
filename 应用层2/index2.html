@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>民间金融·民营经济共生发展指数平台</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="site-header">
+  <div class="header-inner">
+    <div class="logo">
+      <span class="logo-icon">◆</span>
+      <div>
+        <div class="logo-title">民间金融·民营经济共生发展指数平台</div>
+        <div class="logo-sub">Symbiosis Development Index · 温州市政府金融办</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="data-status-badge" id="globalDataBadge">未加载数据</span>
+      <button class="btn-secondary" onclick="App.refreshAllData()">↻ 刷新数据</button>
+      <button class="btn-export" onclick="App.exportReport()">↓ 导出报告</button>
+    </div>
+  </div>
+  <nav class="main-nav">
+    <button class="nav-tab active" data-tab="data">数据管理</button>
+    <button class="nav-tab" data-tab="overview">总览看板</button>
+    <button class="nav-tab" data-tab="resource">资源交互效率</button>
+    <button class="nav-tab" data-tab="synergy">协同发展能力</button>
+    <button class="nav-tab" data-tab="policy">政策与环境支持</button>
+    <button class="nav-tab" data-tab="effect">发展效能</button>
+    <button class="nav-tab" data-tab="warning">风险预警</button>
+    <button class="nav-tab" data-tab="report">季度报告</button>
+  </nav>
+</header>
+
+<main class="main-content">
+
+  <!-- ====== TAB: 数据管理 ====== -->
+  <section class="tab-section active" id="tab-data">
+    <div class="data-mgmt-layout">
+
+      <!-- 左侧：数据源配置 -->
+      <div class="data-sidebar">
+        <div class="sidebar-title">数据源配置</div>
+
+        <!-- 数据源切换 -->
+        <div class="source-type-tabs">
+          <button class="src-tab active" data-src="api">API 接口</button>
+          <button class="src-tab" data-src="import">文件导入</button>
+        </div>
+
+        <!-- === API 配置面板 === -->
+        <div class="src-panel active" id="panel-api">
+          <div class="api-dataset-list" id="apiDatasetList"></div>
+          <button class="btn-add-api" onclick="App.addApiEndpoint()">+ 添加 API 端点</button>
+        </div>
+
+        <!-- === 文件导入面板 === -->
+        <div class="src-panel" id="panel-import">
+          <!-- 数据集选择 -->
+          <div class="form-group">
+            <label>选择目标数据集</label>
+            <select id="importDataset">
+              <option value="trend">季度趋势数据</option>
+              <option value="regions">地区排名数据</option>
+              <option value="industries">行业适配数据</option>
+              <option value="kpis">核心KPI数据</option>
+              <option value="products">融资产品分布</option>
+              <option value="bankTypes">审批周期（机构）</option>
+              <option value="digitalTools">数字工具应用率</option>
+              <option value="activeMetrics">经济活跃度指标</option>
+              <option value="defaultRates">行业违约率</option>
+              <option value="provinces">省内地市对比</option>
+              <option value="forecast">指数预测数据</option>
+            </select>
+          </div>
+
+          <!-- 拖拽上传区 -->
+          <div class="upload-zone" id="uploadZone"
+               ondragover="event.preventDefault();this.classList.add('drag-over')"
+               ondragleave="this.classList.remove('drag-over')"
+               ondrop="App.handleFileDrop(event)">
+            <div class="upload-icon">📂</div>
+            <div class="upload-hint">拖拽文件到此处，或</div>
+            <button class="btn-upload" onclick="document.getElementById('fileInput').click()">选择文件</button>
+            <div class="upload-formats">支持 CSV · Excel (.xlsx/.xls) · JSON</div>
+            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.json" style="display:none" onchange="App.handleFileSelect(event)"/>
+          </div>
+
+          <!-- 字段映射 -->
+          <div id="mappingSection" style="display:none;">
+            <div class="mapping-title">字段映射配置</div>
+            <div class="mapping-hint">将您文件中的列名映射到平台字段</div>
+            <div id="mappingFields"></div>
+            <div class="mapping-actions">
+              <button class="btn-primary" onclick="App.applyMapping()">确认导入</button>
+              <button class="btn-secondary" onclick="App.cancelMapping()">取消</button>
+            </div>
+          </div>
+
+          <!-- 下载模板 -->
+          <div class="template-section">
+            <div class="template-title">下载数据模板</div>
+            <div class="template-list" id="templateList"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧：数据状态 & 预览 -->
+      <div class="data-main">
+        <!-- 数据集状态卡片 -->
+        <div class="dataset-status-grid" id="datasetStatusGrid"></div>
+
+        <!-- 数据预览表格 -->
+        <div class="section-card" id="previewCard" style="display:none;">
+          <div class="section-card-header">
+            <span id="previewTitle">数据预览</span>
+            <div style="display:flex;gap:8px;">
+              <span id="previewMeta" style="color:var(--text-muted);font-size:12px;"></span>
+              <button class="btn-danger-sm" onclick="App.clearDataset()">清除此数据集</button>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table class="rank-table" id="previewTable">
+              <thead id="previewThead"></thead>
+              <tbody id="previewTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- API 测试结果 -->
+        <div class="section-card" id="apiTestResult" style="display:none;">
+          <div class="section-card-header"><span>API 响应预览</span></div>
+          <pre id="apiTestPre" style="font-size:12px;max-height:300px;overflow:auto;background:#f8f9fd;padding:12px;border-radius:6px;"></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== TAB: 总览 ====== -->
+  <section class="tab-section" id="tab-overview">
+    <div id="empty-overview" class="empty-state" style="display:none;">
+      <div class="empty-icon">📊</div>
+      <div class="empty-title">暂无数据</div>
+      <div class="empty-desc">请前往<b>数据管理</b>导入季度趋势数据 (<code>trend</code>) 和地区数据 (<code>regions</code>)</div>
+      <button class="btn-primary" onclick="App.goToTab('data')">前往数据管理</button>
+    </div>
+    <div id="content-overview">
+      <div class="score-banner" id="scoreBanner"></div>
+      <div class="alert-bar" id="alertBar" style="display:none;">
+        <span class="alert-icon">⚠</span>
+        <span id="alertText"></span>
+        <button class="alert-close" onclick="this.parentElement.style.display='none'">✕</button>
+      </div>
+      <div class="charts-row">
+        <div class="chart-box wide"><div class="chart-title">综合指数季度趋势</div><canvas id="trendChart"></canvas></div>
+        <div class="chart-box"><div class="chart-title">四维能力雷达图</div><canvas id="radarChart"></canvas></div>
+      </div>
+      <div class="section-card">
+        <div class="section-card-header">
+          <span>温州各县市区排名</span>
+          <select id="regionFilterDim" onchange="Modules.renderRankTable()">
+            <option value="total">综合指数</option>
+            <option value="d1">资源交互</option>
+            <option value="d2">协同发展</option>
+            <option value="d3">政策环境</option>
+            <option value="d4">发展效能</option>
+          </select>
+        </div>
+        <table class="rank-table"><thead><tr><th>排名</th><th>地区</th><th>综合</th><th>资源交互</th><th>协同发展</th><th>政策环境</th><th>发展效能</th><th>较上季</th><th>预警</th></tr></thead>
+        <tbody id="rankTableBody"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== TAB: 资源交互 ====== -->
+  <section class="tab-section" id="tab-resource">
+    <div id="empty-resource" class="empty-state" style="display:none;">
+      <div class="empty-icon">📂</div><div class="empty-title">暂无数据</div>
+      <div class="empty-desc">需要导入 <code>kpis</code>、<code>industries</code> 数据集</div>
+      <button class="btn-primary" onclick="App.goToTab('data')">前往数据管理</button>
+    </div>
+    <div id="content-resource">
+      <div class="module-header"><h2>资源交互效率模块</h2><p>评估民间融资资源与实体经济需求之间的适配深度，量化融资供给结构匹配水平</p></div>
+      <div class="kpi-row" id="resourceKpis"></div>
+      <div class="charts-row">
+        <div class="chart-box"><div class="chart-title">分行业融资成本-利润率匹配性（%）</div><canvas id="costMatchChart"></canvas></div>
+        <div class="chart-box"><div class="chart-title">信用平台覆盖率季度趋势</div><canvas id="creditTrendChart"></canvas></div>
+      </div>
+      <div class="section-card">
+        <div class="section-card-header"><span>融资供需适配度 — 分规模 × 分行业</span></div>
+        <table class="rank-table"><thead><tr><th>行业</th><th>小微企业</th><th>中型企业</th><th>大型企业</th><th>整体适配度</th><th>状态</th></tr></thead>
+        <tbody id="adaptTableBody"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== TAB: 协同发展 ====== -->
+  <section class="tab-section" id="tab-synergy">
+    <div id="empty-synergy" class="empty-state" style="display:none;">
+      <div class="empty-icon">📂</div><div class="empty-title">暂无数据</div>
+      <div class="empty-desc">需要导入 <code>trend</code>、<code>products</code>、<code>bankTypes</code> 数据集</div>
+      <button class="btn-primary" onclick="App.goToTab('data')">前往数据管理</button>
+    </div>
+    <div id="content-synergy">
+      <div class="module-header"><h2>协同发展能力模块</h2><p>衡量供应链金融渗透、风险共担机制与金融服务响应速度</p></div>
+      <div class="kpi-row" id="synergyKpis"></div>
+      <div class="charts-row">
+        <div class="chart-box wide"><div class="chart-title">供应链金融渗透率 vs 风险共担覆盖率</div><canvas id="synergyTrendChart"></canvas></div>
+        <div class="chart-box"><div class="chart-title">融资产品结构占比</div><canvas id="productPieChart"></canvas></div>
+      </div>
+      <div class="section-card">
+        <div class="section-card-header"><span>贷款审批周期 — 分金融机构类型（天）</span></div>
+        <canvas id="approvalBarChart" style="max-height:240px;"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== TAB: 政策环境 ====== -->
+  <section class="tab-section" id="tab-policy">
+    <div id="empty-policy" class="empty-state" style="display:none;">
+      <div class="empty-icon">📂</div><div class="empty-title">暂无数据</div>
+      <div class="empty-desc">需要导入 <code>trend</code>、<code>digitalTools</code> 数据集</div>
+      <button class="btn-primary" onclick="App.goToTab('data')">前往数据管理</button>
+    </div>
+    <div id="content-policy">
+      <div class="module-header"><h2>政策与环境支持模块</h2><p>量化普惠金融政策落地效果、数字金融工具应用及纠纷化解效率</p></div>
+      <div class="kpi-row" id="policyKpis"></div>
+      <div class="charts-row">
+        <div class="chart-box"><div class="chart-title">普惠金融贷款余额增速趋势</div><canvas id="policyTrendChart"></canvas></div>
+        <div class="chart-box"><div class="chart-title">数字工具应用率雷达</div><canvas id="digitalRadarChart"></canvas></div>
+      </div>
+      <div class="section-card">
+        <div class="section-card-header"><span>政策模拟器 — 贴息率调整对综合评分影响</span></div>
+        <div class="simulator-row">
+          <label>财政贴息调整（±%）：</label>
+          <input type="range" id="subsidySlider" min="-2" max="5" step="0.5" value="0" oninput="App.simulateSubsidy(this.value)">
+          <span id="subsidyVal">0%</span>
+        </div>
+        <div class="simulator-result">综合指数预测变化 <strong id="simDelta">+0.0</strong> 分 &nbsp;|&nbsp; 融资成本匹配性预测 <strong id="simCostMatch">—</strong></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== TAB: 发展效能 ====== -->
+  <section class="tab-section" id="tab-effect">
+    <div id="empty-effect" class="empty-state" style="display:none;">
+      <div class="empty-icon">📂</div><div class="empty-title">暂无数据</div>
+      <div class="empty-desc">需要导入 <code>trend</code>、<code>activeMetrics</code> 数据集</div>
+      <button class="btn-primary" onclick="App.goToTab('data')">前往数据管理</button>
+    </div>
+    <div id="content-effect">
+      <div class="module-header"><h2>发展效能模块</h2><p>追踪民营经济增加值、创新转化率、就业带动弹性及PMI景气预警</p></div>
+      <div class="kpi-row" id="effectKpis"></div>
+      <div class="charts-row">
+        <div class="chart-box wide"><div class="chart-title">PMI景气度 · 融资成本传导弹性 双轴趋势</div><canvas id="pmiChart"></canvas></div>
+        <div class="chart-box"><div class="chart-title">民营经济增加值占GDP（季度）</div><canvas id="gdpChart"></canvas></div>
+      </div>
+      <div class="charts-row">
+        <div class="chart-box"><div class="chart-title">经济活跃度分项指标</div><canvas id="activeChart"></canvas></div>
+        <div class="chart-box"><div class="chart-title">研发投入转化率趋势</div><canvas id="rndChart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== TAB: 风险预警 ====== -->
+  <section class="tab-section" id="tab-warning">
+    <div id="empty-warning" class="empty-state" style="display:none;">
+      <div class="empty-icon">📂</div><div class="empty-title">暂无数据</div>
+      <div class="empty-desc">需要导入 <code>trend</code>、<code>forecast</code>、<code>defaultRates</code> 数据集</div>
+      <button class="btn-primary" onclick="App.goToTab('data')">前往数据管理</button>
+    </div>
+    <div id="content-warning">
+      <div class="module-header"><h2>风险预警系统</h2><p>基于阈值监控与ARIMA趋势预测，自动识别系统性风险并生成干预建议</p></div>
+      <div class="warning-grid" id="warningGrid"></div>
+      <div class="section-card" style="margin-top:20px;">
+        <div class="section-card-header"><span>指数预测趋势（ARIMA / 导入预测数据）</span></div>
+        <canvas id="arimaChart" style="max-height:280px;"></canvas>
+      </div>
+      <div class="section-card">
+        <div class="section-card-header"><span>短板诊断与改进建议</span></div>
+        <div id="diagnosisPanel"></div>
+      </div>
+      <div class="section-card">
+        <div class="section-card-header"><span>高风险行业违约率监控</span></div>
+        <canvas id="defaultRateChart" style="max-height:240px;"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== TAB: 季度报告 ====== -->
+  <section class="tab-section" id="tab-report">
+    <div id="empty-report" class="empty-state" style="display:none;">
+      <div class="empty-icon">📋</div><div class="empty-title">暂无数据</div>
+      <div class="empty-desc">请先导入各模块数据后生成报告</div>
+      <button class="btn-primary" onclick="App.goToTab('data')">前往数据管理</button>
+    </div>
+    <div id="content-report">
+      <div class="module-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <div><h2 id="reportTitle">季度评估报告</h2><p>温州市民间金融服务实体经济效能评估</p></div>
+        <button class="btn-export" onclick="window.print()">↓ 打印 / 导出 PDF</button>
+      </div>
+      <div class="report-body" id="reportBody"></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ====== MODAL: API 配置 ====== -->
+<div class="modal-overlay" id="apiModal" style="display:none;" onclick="if(event.target===this)App.closeApiModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span id="apiModalTitle">API 端点配置</span>
+      <button class="modal-close" onclick="App.closeApiModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>数据集类型</label>
+        <select id="apiDatasetType">
+          <option value="trend">季度趋势数据 (trend)</option>
+          <option value="regions">地区排名数据 (regions)</option>
+          <option value="industries">行业适配数据 (industries)</option>
+          <option value="kpis">核心KPI数据 (kpis)</option>
+          <option value="products">融资产品分布 (products)</option>
+          <option value="bankTypes">审批周期 (bankTypes)</option>
+          <option value="digitalTools">数字工具应用率 (digitalTools)</option>
+          <option value="activeMetrics">经济活跃度 (activeMetrics)</option>
+          <option value="defaultRates">行业违约率 (defaultRates)</option>
+          <option value="provinces">省内地市对比 (provinces)</option>
+          <option value="forecast">指数预测 (forecast)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>API URL</label>
+        <input type="url" id="apiUrl" placeholder="https://api.example.com/data/trend" />
+      </div>
+      <div class="form-group">
+        <label>请求方式</label>
+        <select id="apiMethod"><option>GET</option><option>POST</option></select>
+      </div>
+      <div class="form-group">
+        <label>Authorization Header（可选）</label>
+        <input type="text" id="apiAuth" placeholder="Bearer your-token-here" />
+      </div>
+      <div class="form-group">
+        <label>自定义 Headers（JSON，可选）</label>
+        <textarea id="apiHeaders" rows="3" placeholder='{"Content-Type":"application/json"}'></textarea>
+      </div>
+      <div class="form-group">
+        <label>数据路径（JSONPath，可选）</label>
+        <input type="text" id="apiDataPath" placeholder="data.list 或留空（直接使用响应根）" />
+      </div>
+      <div class="form-group">
+        <label>请求体（POST 时，JSON，可选）</label>
+        <textarea id="apiBody" rows="3" placeholder='{"quarter":"2024Q4"}'></textarea>
+      </div>
+      <div class="form-group">
+        <label>自动刷新间隔</label>
+        <select id="apiRefreshInterval">
+          <option value="0">不自动刷新</option>
+          <option value="300000">每 5 分钟</option>
+          <option value="900000">每 15 分钟</option>
+          <option value="3600000">每小时</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="App.testApiEndpoint()">测试连接</button>
+        <button class="btn-primary" onclick="App.saveApiEndpoint()">保存并拉取</button>
+        <button class="btn-ghost" onclick="App.closeApiModal()">取消</button>
+      </div>
+      <div id="apiTestStatus" style="margin-top:10px;font-size:12px;"></div>
+    </div>
+  </div>
+</div>
+
+<footer class="site-footer">
+  民间金融·民营经济共生发展指数平台 v2.0 &nbsp;|&nbsp; 温州市政府金融办 &nbsp;|&nbsp; 数据来源：API接口 / 手动导入
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
